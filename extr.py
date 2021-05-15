@@ -1,3 +1,7 @@
+#Composed by Dr Wen-Xuan Wang, CSU. version 3.0.2021.05.15. Xiangya School of Pharmaceutical Science.
+# Please cite J. Org. Chem. 2020, 85, 17, 11350–11358
+# 作者：王文宣，中南大学，湘雅药学院
+
 #Parameters table
 temp = 298 #termperature for Boltzmann population calculation (K)
 threshold_geom = 0.1 #threshold to determine geometery duplicates (Angstrom)
@@ -51,7 +55,7 @@ else:
                 shielding.append(shielding_line.split( )[4])
         if len(atom_num) > 0:     
           prefix = filenames[i][:-4]     
-          shielding_file = open(prefix+'_C_shielding.txt', 'a')
+          shielding_file = open(prefix+'_C_shielding.txt', 'w')
           for j in range(len(atom_num)):
             print(atom_num[j], "  ", shielding[j], file = shielding_file)  #save shielding data into text file
           shielding_file.close()
@@ -118,6 +122,8 @@ def dis_matrix_cp(file_nameA, file_nameB, threshold):
 
     #read the lines of coordinates and compare the distance between atoms
   k = 1 #record the linenumber of the coordinate line for processing
+  distanceA = []
+  distanceB = []
   for i in range(line0+2, line1-1):
       A_coordinate_line1 = linecache.getline(file_nameA, i)
       arrayA_atom1 = np.array(A_coordinate_line1.split(',')[2: ])
@@ -142,11 +148,17 @@ def dis_matrix_cp(file_nameA, file_nameB, threshold):
         arrayB_atom2 = np.array(B_coordinate_line2.split(',')[2: ])
         arrayB_atom2_float = arrayB_atom2.astype(np.float)
 
-        distanceA = ((arrayA_atom1_float[0]-arrayA_atom2_float[0]) ** 2 + (arrayA_atom1_float[1]-arrayA_atom2_float[1]) ** 2 + (arrayA_atom1_float[2]-arrayA_atom2_float[2]) ** 2) **0.5
-        distanceB = ((arrayB_atom1_float[0]-arrayB_atom2_float[0]) ** 2 + (arrayB_atom1_float[1]-arrayB_atom2_float[1]) ** 2 + (arrayB_atom1_float[2]-arrayB_atom2_float[2]) ** 2) **0.5
+        distanceA.append(((arrayA_atom1_float[0]-arrayA_atom2_float[0]) ** 2 + (arrayA_atom1_float[1]-arrayA_atom2_float[1]) ** 2 + (arrayA_atom1_float[2]-arrayA_atom2_float[2]) ** 2) **0.5)
+        distanceB.append(((arrayB_atom1_float[0]-arrayB_atom2_float[0]) ** 2 + (arrayB_atom1_float[1]-arrayB_atom2_float[1]) ** 2 + (arrayB_atom1_float[2]-arrayB_atom2_float[2]) ** 2) **0.5)
         
-        if (distanceA - distanceB) > threshold :
-          return 0
+  distanceA = np.array(distanceA,dtype='float32')
+  distanceB = np.array(distanceB,dtype='float32')
+  distanceA_sort = np.sort(distanceA)
+  distanceB_sort = np.sort(distanceB)
+
+  for i in range(len(distanceA_sort)):
+    if abs(distanceA_sort[i] - distanceB_sort[i]) > threshold: #Check if the distance matrices of conformers are the same
+      return 0
   return 1
 
 #check duplicates by energy and geometry
