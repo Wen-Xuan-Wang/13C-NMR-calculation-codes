@@ -1,11 +1,17 @@
-#Composed by Dr Wen-Xuan Wang, CSU. version 3.0.2021.05.15. Xiangya School of Pharmaceutical Science.
-# Please cite J. Org. Chem. 2020, 85, 17, 11350–11358
-# 作者：王文宣，中南大学，湘雅药学院
+print("Composed by Dr Wen-Xuan Wang, CSU. version 3.1.2021.06.22. Xiangya School of Pharmaceutical Science.")
+print("Please cite J. Org. Chem. 2020, 85, 17, 11350–11358")
+print("作者：王文宣，中南大学，湘雅药学院")
+print(" ")
 
 #Parameters table
 temp = 298 #termperature for Boltzmann population calculation (K)
 threshold_geom = 0.1 #threshold to determine geometery duplicates (Angstrom)
 threshold_energy = 0.2 #Gibbs free energy threshold to determine geometery duplicates (kcal/mol)
+
+print("Termperature for Boltzmann population calculation (K) is ", temp)
+print("threshold to determine geometery duplicates (Angstrom) is ", threshold_geom)
+print("Gibbs free energy threshold to determine geometery duplicates (kcal/mol) is", threshold_energy)
+print(" ")
 
 import os
 import glob
@@ -16,11 +22,16 @@ import csv
 import math
 
 filenames = []
-imaginary_list = []
 gibbs_list = []
 duplicates_list = []
-error_list = []
 
+class Conf_info():
+  filename = ''
+  gibbs = 0.0
+  imaginary = 0
+  error = ' '
+  def __init__(self,filename):
+    self.filename = filename
 
 outfilenames = glob.glob('*.out') #obtain all out file names
 logfilenames = glob.glob('*.log') #obtain all log file names
@@ -32,22 +43,22 @@ if len(filenames) == 0:
     print ("No out or log files found")
     quit()
 else:
+    conf_list = []
     for i in range(len(filenames)):
       atom_num = [] #for reading shielding tensors
       shielding = [] #for reading shielding tensors
-
+      conf = Conf_info(filenames[i])
       with open(filenames[i], 'r') as f:
         gibbs_line_num = -1
         for line_number, key_word in enumerate(f.readlines()):
-              if '******    1 imaginary frequencies (negative Signs) ******' in key_word: 
+              if ' imaginary frequencies (negative Signs) ******' in key_word: 
                 #read imaginary frequencies
-                imaginary_list.append(i)
-                print(filenames[i], "has imaginary frequencies and will not be considered")                
+                conf.imaginary = 1                             
               elif 'Sum of electronic and thermal Free Energies=' in key_word: 
-                  #read the line number of gibbs free energy
-                gibbs_line_num = line_number        
-                gibbs_line = linecache.getline(filenames[i], gibbs_line_num+1)
-                gibbs_list.append(gibbs_line.split( )[-1]) #build the Gibbs free energy list
+                gibbs_line_num = line_number
+                conf.gibbs = float(key_word.split( )[-1]) #build the Gibbs free energy list
+              elif '-- Number of steps exceeded' in key_word:
+                conf.error = 'Optimization failed because max steps exceeded'
               elif 'C    Isotropic =' in key_word:  #read the shielding tensor data of C                
                 shielding_line_num = line_number
                 shielding_line = linecache.getline(filenames[i], shielding_line_num+1)
@@ -60,38 +71,32 @@ else:
             print(atom_num[j], "  ", shielding[j], file = shielding_file)  #save shielding data into text file
           shielding_file.close()
 
-        if gibbs_line_num == -1:
-          print("No gibbs free energy information in", filenames[i])
-          error_list.append(i)
-
+      conf_list.append(conf)
+      del conf
            
+filenames_selected = []          
 #Remove structures with imaginary frequencies or without gibbs free energy
-remove_list = imaginary_list + error_list
+for i in range(len(conf_list)):
+  if conf_list[i].imaginary == 1:
+    print(conf_list[i].filename, " has imaginary frequencies, and will not be considered")
+    continue
+  elif conf_list[i].gibbs == 0:
+    print(conf_list[i].filename, " has no Gibbs free energy information", conf_list[i].error)
+    continue
+  else:
+    filenames_selected.append(conf_list[i].filename)
+    gibbs_list.append(conf_list[i].gibbs)
 
-if len(imaginary_list) > 0:
-  imaginary_list = np.array(imaginary_list)
-  imaginary_list = imaginary_list.astype(np.int)
-  for i in range(len(imaginary_list)):
-    del gibbs_list[imaginary_list[i]-i] #delete the gibbs free energy in gibbs_list
 
-if len(remove_list) > 0:
-  remove_list = np.array(remove_list)
-  remove_list = remove_list.astype(int)
-  remove_list.sort()
-  for i in range(len(remove_list)):
-    del filenames[remove_list[i]-i] #delete the file names of the structures with imaginary frequencies or without gibbs free energy
-
-#Change the arrays into numpy array
-filenames = np.array(filenames)
-gibbs_list = np.array(gibbs_list)
+filenames_selected = np.array(filenames_selected)
+gibbs_list = np.array(gibbs_list,dtype=float)
 
 
 #sort the information matrix by Gibbs free energy
-gibbs_float = gibbs_list.astype(float)
-gibbs_order = np.argsort(gibbs_float)
+gibbs_order = np.argsort(gibbs_list)
 
-filenames_sort = filenames[gibbs_order]
-gibbs_float_sort = gibbs_float[gibbs_order]
+filenames_sort = filenames_selected[gibbs_order]
+gibbs_float_sort = gibbs_list[gibbs_order]
 
 def dis_matrix_cp(file_nameA, file_nameB, threshold):
   #This function uses the coordinates for multiple steps calculation to identify duplicates
@@ -127,13 +132,13 @@ def dis_matrix_cp(file_nameA, file_nameB, threshold):
   for i in range(line0+2, line1-1):
       A_coordinate_line1 = linecache.getline(file_nameA, i)
       arrayA_atom1 = np.array(A_coordinate_line1.split(',')[2: ])
-      arrayA_atom1_float = arrayA_atom1.astype(np.float)  
+      arrayA_atom1_float = arrayA_atom1.astype(float)  
 
       k = k+1
       
       B_coordinate_line1 = linecache.getline(file_nameB, line2+k)
       arrayB_atom1 = np.array(B_coordinate_line1.split(',')[2: ])
-      arrayB_atom1_float = arrayB_atom1.astype(np.float)
+      arrayB_atom1_float = arrayB_atom1.astype(float)
 
       
       
@@ -141,12 +146,12 @@ def dis_matrix_cp(file_nameA, file_nameB, threshold):
       for j in range(i, line1):
         A_coordinate_line2 = linecache.getline(file_nameA, j+1)
         arrayA_atom2 = np.array(A_coordinate_line2.split(',')[2: ])
-        arrayA_atom2_float = arrayA_atom2.astype(np.float)   
+        arrayA_atom2_float = arrayA_atom2.astype(float)   
 
         l = l + 1
         B_coordinate_line2 = linecache.getline(file_nameB, line2+k+l)
         arrayB_atom2 = np.array(B_coordinate_line2.split(',')[2: ])
-        arrayB_atom2_float = arrayB_atom2.astype(np.float)
+        arrayB_atom2_float = arrayB_atom2.astype(float)
 
         distanceA.append(((arrayA_atom1_float[0]-arrayA_atom2_float[0]) ** 2 + (arrayA_atom1_float[1]-arrayA_atom2_float[1]) ** 2 + (arrayA_atom1_float[2]-arrayA_atom2_float[2]) ** 2) **0.5)
         distanceB.append(((arrayB_atom1_float[0]-arrayB_atom2_float[0]) ** 2 + (arrayB_atom1_float[1]-arrayB_atom2_float[1]) ** 2 + (arrayB_atom1_float[2]-arrayB_atom2_float[2]) ** 2) **0.5)
@@ -162,21 +167,17 @@ def dis_matrix_cp(file_nameA, file_nameB, threshold):
   return 1
 
 #check duplicates by energy and geometry
-for i in range(len(filenames)-1):
+for i in range(len(filenames_sort)-1):
   gibbs_difference = gibbs_float_sort[i+1] - gibbs_float_sort[i]
   if gibbs_difference < (threshold_energy / 627.5094):
     if dis_matrix_cp(filenames_sort[i+1],filenames_sort[i],threshold_geom) == 1:
        print(filenames_sort[i+1], "is the same as", filenames_sort[i])
        duplicates_list.append([i+1])
-     
-    
-
-    
 
 #remove duplicates
 if len(duplicates_list) > 0:
   duplicates_list = np.array(duplicates_list)
-  duplicates_list = duplicates_list.astype(np.int)
+  duplicates_list = duplicates_list.astype(int)
   for i in range(len(duplicates_list)):    
     filenames_sort = np.delete(filenames_sort, (duplicates_list[i]-i)) 
     gibbs_float_sort = np.delete(gibbs_float_sort, (duplicates_list[i]-i))
@@ -188,7 +189,7 @@ gibbs_kcal = []
 for i in range(len(gibbs_float_sort)):
   gibbs_kcal.append((gibbs_float_sort[i]-gibbs_float_sort[0])*627.5094) #Hatree converted into kcal/mol
 gibbs_kcal = np.array(gibbs_kcal)
-gibbs_kcal = gibbs_kcal.astype(np.float)
+gibbs_kcal = gibbs_kcal.astype(float)
 boltzmann_factor = 2.7182818284590452353602874**(-1*gibbs_kcal/temp/0.0019858775) #calculate Boltzmann factors
 sum_boltzmann = 0
 for i in range(len(boltzmann_factor)):
